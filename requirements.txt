@@ -1,0 +1,30 @@
+# Group 1: Core LangChain
+langchain>=1.3.2
+langchain-core
+langchain-community
+langchain-text-splitters>=1.1.2
+
+# Group 2: Embeddings (bge-small-en-v1.5 + bge-reranker-v2-m3)
+langchain-huggingface>=1.2.2
+sentence-transformers>=5.5.1
+tiktoken>=0.13.0
+
+# Group 3: PDF Parsing (hi_res OCR)
+langchain-unstructured>=1.0.1
+unstructured[pdf]>=0.22.31
+
+# Group 4: Vector DB
+weaviate-client>=4.21.2
+langchain-weaviate>=0.0.6
+
+# Group 5: LLM via Ollama (llama3.2 / qwen3)
+langchain-ollama
+
+# Group 6: Jupyter
+ipykernel>=7.2.0
+ipython>=9.14.0
+jupyter>=1.1.1
+notebook>=7.5.6
+
+# Utilities
+python-dotenv

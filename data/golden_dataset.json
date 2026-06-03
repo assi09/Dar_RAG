@@ -1,0 +1,102 @@
+[
+  {
+    "id": 1,
+    "question": "What safeguards does Control 12 recommend for network infrastructure?",
+    "ground_truth_answer": "Control 12 includes 8 safeguards: 12.1 Ensure Network Infrastructure is Up-to-Date (run latest stable software, review monthly); 12.2 Establish and Maintain a Secure Network Architecture (address segmentation, least privilege, and availability); 12.3 Securely Manage Network Infrastructure (use version-controlled infrastructure-as-code, SSH, HTTPS); 12.4 Establish and Maintain Architecture Diagrams (review annually); 12.5 Centralize Network AAA; 12.6 Use Secure Network Management Protocols (802.1X, WPA2 Enterprise); 12.7 Ensure Remote Devices Use VPN and AAA; 12.8 Establish Dedicated Computing Resources for Administrative Work (physically or logically separated from primary network).",
+    "ground_truth_context": "Establish, implement, and actively manage (track, report, correct) network devices, in order to prevent attackers from exploiting vulnerable network services and access points. Secure network infrastructure is an essential defense against attacks. This includes an appropriate security architecture, addressing vulnerabilities that are, often times, introduced with default settings, monitoring for changes, and reassessment of current configurations.",
+    "source_section": "Control 12: Network Infrastructure Management",
+    "source_pages": [44, 45, 76],
+    "control_number": 12,
+    "keywords": ["network infrastructure", "safeguards", "architecture", "VPN", "AAA", "WPA2"]
+  },
+  {
+    "id": 2,
+    "question": "How should organizations monitor network traffic for threats?",
+    "ground_truth_answer": "Control 13 (Network Monitoring and Defense) provides guidance. Organizations should centralize security event alerting using a SIEM for log correlation and analysis (13.1). They should deploy host-based intrusion detection solutions (13.2) and network intrusion detection solutions such as NIDS or cloud service provider equivalent (13.3). Traffic filtering between network segments should be performed where appropriate (13.4). A trained team should implement processes for incident detection, analysis, and mitigation, with visibility into cloud platforms. SIEM and weekly log reviews are necessary to tune thresholds and identify abnormal events.",
+    "ground_truth_context": "Operate processes and tooling to establish and maintain comprehensive network monitoring and defense against security threats across the enterprise's network infrastructure and user base. Security tools can only be effective if they are supporting a process of continuous monitoring that allows staff the ability to be alerted and respond to security incidents quickly.",
+    "source_section": "Control 13: Network Monitoring and Defense",
+    "source_pages": [46, 47, 77],
+    "control_number": 13,
+    "keywords": ["network monitoring", "SIEM", "intrusion detection", "NIDS", "threat detection", "log correlation"]
+  },
+  {
+    "id": 3,
+    "question": "What are the requirements for penetration testing frequency?",
+    "ground_truth_answer": "Control 18 (Penetration Testing) requires: external penetration tests no less than annually (18.2), internal penetration tests no less than annually (18.5). Organizations must first establish and maintain a penetration testing program appropriate to their size, complexity, and maturity, defining scope, rules of engagement, and methodology (18.1). External testing must include enterprise and environmental reconnaissance. Testing may be clear box or opaque box.",
+    "ground_truth_context": "Establish and maintain a penetration testing program appropriate to the size, complexity, and maturity of the enterprise. Penetration testing program characteristics include scope, such as network, web application, Application Programming Interface (API), hosted services, and physical premise controls; frequency; limitations, such as acceptable hours, and excluded targets; point of contact information; remediation, such as how findings will be routed internally; and retrospective requirements.",
+    "source_section": "Control 18: Penetration Testing",
+    "source_pages": [63, 64, 65, 81],
+    "control_number": 18,
+    "keywords": ["penetration testing", "frequency", "annually", "external", "internal", "clear box", "opaque box"]
+  },
+  {
+    "id": 4,
+    "question": "How should enterprise assets be inventoried and tracked?",
+    "ground_truth_answer": "Control 1 (Inventory and Control of Enterprise Assets) requires maintaining an accurate, detailed, up-to-date inventory of all enterprise assets with the potential to store or process data, including end-user devices, network devices, IoT devices, and servers (safeguard 1.1). The inventory must record network address, hardware address, machine name, asset owner, department, and whether the asset is approved to connect. It should be reviewed bi-annually or more frequently. Unauthorized assets must be addressed weekly — removed, denied, or quarantined (1.2). Active discovery tools should be used to identify assets on the network (1.3). DHCP logging can help update the inventory weekly (1.4).",
+    "ground_truth_context": "Actively manage (inventory, track, and correct) all enterprise assets (end-user devices, including portable and mobile; network devices; non-computing/Internet of Things (IoT) devices; and servers) connected to the infrastructure physically, virtually, remotely, and those within cloud environments, to accurately know the totality of assets that need to be monitored and protected within the enterprise.",
+    "source_section": "Control 01: Inventory and Control of Enterprise Assets",
+    "source_pages": [17, 18, 19],
+    "control_number": 1,
+    "keywords": ["asset inventory", "enterprise assets", "DHCP", "discovery tool", "IoT", "bi-annually"]
+  },
+  {
+    "id": 5,
+    "question": "What does CIS say about secure configuration of enterprise software?",
+    "ground_truth_answer": "Control 4 (Secure Configuration of Enterprise Assets and Software) addresses this. Default configurations for enterprise assets and software are geared towards ease-of-deployment, not security — they often include open services and ports, default accounts and passwords, and pre-installed unneeded software. Organizations must establish and maintain a secure configuration process, apply security baselines (such as CIS Benchmarks or NIST guidelines), install only required software packages, apply OS and security patches, and regularly scan for misconfigurations. Commercial tools can evaluate rule sets of network filtering devices to detect inconsistencies.",
+    "ground_truth_context": "As delivered from manufacturers and resellers, the default configurations for enterprise assets and software are normally geared towards ease-of-deployment and ease-of-use rather than security. Basic controls, open services and ports, default accounts or passwords, pre-configured Domain Name System (DNS) settings, older (vulnerable) protocols, and pre-installation of unneeded software can be exploitable in their default state.",
+    "source_section": "Control 04: Secure Configuration of Enterprise Assets and Software",
+    "source_pages": [26, 27, 28],
+    "control_number": 4,
+    "keywords": ["secure configuration", "default settings", "security baseline", "CIS Benchmarks", "patches", "hardening"]
+  },
+  {
+    "id": 6,
+    "question": "How should organizations manage user account privileges?",
+    "ground_truth_answer": "Control 5 (Account Management) and Control 6 (Access Control Management) address this. Control 5 requires maintaining an inventory of all accounts including user and admin accounts (5.1), using unique passwords with MFA (5.2), disabling dormant accounts after 45 days of inactivity (5.3), restricting administrator privileges to dedicated administrator accounts (5.4), and centralizing account management through a directory service (5.6). Control 6 requires role-based access control based on need-to-know and least privilege principles, requiring MFA for externally-exposed applications (6.3), remote access (6.4), and administrative access (6.5), and defining role-based access control with annual access reviews (6.8).",
+    "ground_truth_context": "Use processes and tools to create, assign, manage, and revoke access credentials and privileges for user, administrator, and service accounts for enterprise assets and software. Accounts should only have the minimal authorization needed for the role. Developing consistent access rights for each role and assigning roles to users is a best practice.",
+    "source_section": "Control 05: Account Management / Control 06: Access Control Management",
+    "source_pages": [29, 30, 31, 32],
+    "control_number": 6,
+    "keywords": ["account management", "privileges", "MFA", "role-based access", "least privilege", "dormant accounts", "PAM"]
+  },
+  {
+    "id": 7,
+    "question": "What are the CIS recommendations for data recovery and backup?",
+    "ground_truth_answer": "Control 11 (Data Recovery) requires establishing and maintaining a data recovery practice sufficient to restore in-scope enterprise assets to a pre-incident state. Data recovery procedures should be defined in the data management process from Control 3 (Data Protection), including backup procedures based on data value, sensitivity, and criticality. The ransomware threat has driven importance of this control — organizations must have offline or segmented backups that cannot be encrypted by ransomware. Recovery processes should be tested regularly to ensure they function correctly when needed.",
+    "ground_truth_context": "Data recovery procedures should be defined in the data management process described in CIS Control 3, Data Protection. This should include backup procedures based on data value, sensitivity, and criticality. There has been an exponential rise in ransomware over the last few years. It is not a new threat, though it has become more commercialized and organized as a reliable method for attacking enterprises.",
+    "source_section": "Control 11: Data Recovery",
+    "source_pages": [42, 43],
+    "control_number": 11,
+    "keywords": ["data recovery", "backup", "ransomware", "restore", "incident", "offline backups"]
+  },
+  {
+    "id": 8,
+    "question": "How should audit logs be managed and retained?",
+    "ground_truth_answer": "Control 8 (Audit Log Management) requires collecting, alerting, reviewing, and retaining audit logs of events that could help detect, understand, or recover from an attack. Key safeguards include: establish an audit log management process defining logging requirements (8.1); collect audit logs across enterprise assets (8.2); ensure adequate log storage (8.3); standardize time synchronization with at least two sources (8.4); collect detailed audit logs including event source, date, username, timestamp, source and destination addresses (8.5); collect DNS query logs (8.6), URL request logs (8.7), and command-line logs (8.8); centralize log collection (8.9); retain logs for a minimum of 90 days (8.10); conduct weekly log reviews to detect anomalies (8.11).",
+    "ground_truth_context": "Collect, alert, review, and retain audit logs of events that could help detect, understand, or recover from an attack. Log collection and analysis is critical for an enterprise's ability to detect malicious activity quickly. Sometimes audit records are the only evidence of a successful attack. Retain audit logs across enterprise assets for a minimum of 90 days.",
+    "source_section": "Control 08: Audit Log Management",
+    "source_pages": [36, 37],
+    "control_number": 8,
+    "keywords": ["audit logs", "log retention", "90 days", "SIEM", "time synchronization", "DNS logs", "centralize logs"]
+  },
+  {
+    "id": 9,
+    "question": "What safeguards protect against malware on enterprise assets?",
+    "ground_truth_answer": "Control 10 (Malware Defenses) addresses this. Key safeguards include deploying and maintaining anti-malware software on enterprise assets (10.1), configuring automatic anti-malware signature updates (10.2), disabling autorun and autoplay for removable media (10.3), configuring automatic anti-malware scanning of removable media (10.4), enabling anti-exploitation features such as Microsoft DEP and Windows Defender Exploit Guard (10.5), and centrally managing anti-malware software (10.6). Effective malware protection includes traditional endpoint malware prevention and detection suites with automated IOC updates.",
+    "ground_truth_context": "Effective malware protection includes traditional endpoint malware prevention and detection suites. To ensure malware IOCs are up-to-date, enterprises can receive automated updates from the anti-malware vendor. Enable anti-exploitation features on enterprise assets and software, where possible, such as Microsoft Data Execution Prevention (DEP), Windows Defender Exploit Guard (WDEG), or Apple System Integrity Protection (SIP).",
+    "source_section": "Control 10: Malware Defenses",
+    "source_pages": [40, 41],
+    "control_number": 10,
+    "keywords": ["malware", "anti-malware", "anti-exploitation", "DEP", "WDEG", "autorun", "signature updates", "IOC"]
+  },
+  {
+    "id": 10,
+    "question": "How should vulnerability management be implemented?",
+    "ground_truth_answer": "Control 7 (Continuous Vulnerability Management) requires: establishing and maintaining a documented vulnerability management process reviewed annually (7.1); maintaining a risk-based remediation strategy with monthly reviews (7.2); performing automated OS patch management monthly (7.3); automated application patch management monthly (7.4); performing automated vulnerability scans of internal assets quarterly using SCAP-compliant tools with both authenticated and unauthenticated scans (7.5); vulnerability scans of externally-exposed assets monthly (7.6); and remediating detected vulnerabilities monthly (7.7). When prioritizing, enterprises should augment CVSS scores with likelihood-of-exploitation data and track remediation through problem-ticketing systems.",
+    "ground_truth_context": "Develop a plan to continuously assess and track vulnerabilities on all enterprise assets within the enterprise's infrastructure, in order to remediate, and minimize, the window of opportunity for attackers. Monitor public and private industry sources for new threat and vulnerability information. Establish and maintain a documented vulnerability management process for enterprise assets. Review and update documentation annually, or when significant enterprise changes occur.",
+    "source_section": "Control 07: Continuous Vulnerability Management",
+    "source_pages": [33, 34, 35],
+    "control_number": 7,
+    "keywords": ["vulnerability management", "patch management", "CVSS", "SCAP", "remediation", "vulnerability scanning", "CVE"]
+  }
+]
