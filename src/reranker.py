@@ -6,7 +6,7 @@ from embedder import get_embedder
 from vector_store import get_client, get_vector_store
 
 RERANKER_MODEL = "BAAI/bge-reranker-v2-m3"  # 568M params, as specified in RAG_Pipeline.pptx
-RETRIEVE_K = 10   # fetch more candidates from Weaviate before reranking
+RETRIEVE_K = 50   # retrieve wide, rerank narrow — as specified in RAG_Pipeline.pptx
 RERANK_TOP_N = 5  # keep only the top N after reranking
 
 

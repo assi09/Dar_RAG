@@ -5,5 +5,7 @@ __pycache__/
 *.egg-info/
 .DS_Store
 data/docs/
+data/.record_manager.db
+data/.file_hashes.json
 
 *.Identifier
