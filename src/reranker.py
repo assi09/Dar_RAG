@@ -1,3 +1,4 @@
+import hashlib
 from langchain_classic.retrievers import ContextualCompressionRetriever
 from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
 from langchain_community.cross_encoders import HuggingFaceCrossEncoder
@@ -32,6 +33,18 @@ def get_reranking_retriever(embedder=None):
     ), client
 
 
+def _deduplicate(docs: list[Document]) -> list[Document]:
+    """Remove chunks with identical content — caused by appendix duplicating main safeguard tables."""
+    seen = set()
+    unique = []
+    for doc in docs:
+        h = hashlib.md5(doc.page_content.strip().encode()).hexdigest()
+        if h not in seen:
+            seen.add(h)
+            unique.append(doc)
+    return unique
+
+
 def retrieve_and_rerank(query: str, embedder=None) -> list[dict]:
     """Retrieve and rerank chunks for a given query."""
     retriever, client = get_reranking_retriever(embedder)
@@ -39,6 +52,8 @@ def retrieve_and_rerank(query: str, embedder=None) -> list[dict]:
         docs: list[Document] = retriever.invoke(query)
     finally:
         client.close()
+
+    docs = _deduplicate(docs)
 
     return [
         {

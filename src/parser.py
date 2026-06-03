@@ -25,7 +25,16 @@ def load_documents(docs_dir: Path = DOCS_DIR) -> list[Document]:
             strategy="hi_res",
             mode="elements",
         )
-        elements = loader.load()
+        try:
+            elements = loader.load()
+        except Exception as e:
+            print(f"  WARNING: parse error ({type(e).__name__}), retrying with fast strategy...")
+            loader = UnstructuredLoader(
+                file_path=str(file_path),
+                strategy="fast",
+                mode="elements",
+            )
+            elements = loader.load()
         print(f"  -> {len(elements)} element(s) extracted")
         all_elements.extend(elements)
 
