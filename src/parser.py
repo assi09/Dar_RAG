@@ -28,13 +28,8 @@ def load_documents(docs_dir: Path = DOCS_DIR) -> list[Document]:
         try:
             elements = loader.load()
         except Exception as e:
-            print(f"  WARNING: parse error ({type(e).__name__}), retrying with fast strategy...")
-            loader = UnstructuredLoader(
-                file_path=str(file_path),
-                strategy="fast",
-                mode="elements",
-            )
-            elements = loader.load()
+            print(f"  WARNING: parse error ({type(e).__name__}), retrying hi_res...")
+            elements = loader.load()  # retry once — Tesseract errors are often transient
         print(f"  -> {len(elements)} element(s) extracted")
         all_elements.extend(elements)
 

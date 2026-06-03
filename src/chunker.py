@@ -18,6 +18,14 @@ def chunk_documents(docs: list[Document]) -> list[Document]:
     chunks = splitter.split_documents(docs)
     before = len(chunks)
     chunks = [c for c in chunks if len(c.page_content.strip()) >= MIN_CHUNK_LENGTH]
+
+    # Prepend section title to every chunk so it is self-explanatory when
+    # retrieved in isolation — reranker and LLM see the section context directly.
+    for chunk in chunks:
+        title = chunk.metadata.get("section_title", "").strip()
+        if title and not chunk.page_content.startswith(f"[{title}]"):
+            chunk.page_content = f"[{title}]\n\n{chunk.page_content}"
+
     print(f"Chunked {len(docs)} sections -> {before} chunks -> {len(chunks)} after filtering noise")
     return chunks
 
