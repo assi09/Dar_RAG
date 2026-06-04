@@ -8,7 +8,13 @@ from groq import Groq
 load_dotenv(Path(__file__).parent.parent / ".env")
 from deepeval.models.base_model import DeepEvalBaseLLM
 
-GROQ_MODEL = "llama-3.3-70b-versatile"
+# Override via .env: GROQ_MODEL=llama-3.1-8b-instant
+# Available free models and their daily token limits:
+#   llama-3.3-70b-versatile   — 100K TPD  (best quality)
+#   llama-3.1-70b-versatile   — 100K TPD
+#   llama-3.1-8b-instant      — 500K TPD  (use when 70b limit hit)
+#   gemma2-9b-it              — 500K TPD
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "llama-3.3-70b-versatile")
 
 
 class GroqJudge(DeepEvalBaseLLM):
