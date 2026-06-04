@@ -45,15 +45,11 @@ def build_test_cases(dataset: list[dict]) -> list[LLMTestCase]:
         actual_output = generate(entry["question"], chunks)
         retrieval_context = [c["content"] for c in chunks]
 
-        # context = ground truth facts the answer should be judged against
-        # using full ground_truth_answer (not the narrow one-sentence context)
-        # so hallucination metric doesn't flag correct facts as fabricated
         test_cases.append(LLMTestCase(
             input=entry["question"],
             actual_output=actual_output,
             expected_output=entry["ground_truth_answer"],
             retrieval_context=retrieval_context,
-            context=[entry["ground_truth_answer"]],
         ))
     return test_cases
 

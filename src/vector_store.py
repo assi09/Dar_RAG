@@ -26,9 +26,12 @@ def get_vector_store(client: weaviate.WeaviateClient, embedder=None) -> Weaviate
 
 
 def ingest(chunks: list[Document], embedder=None) -> None:
-    """Embed and store chunks into Weaviate. Call after parsing + chunking."""
+    """Embed and store chunks into Weaviate. Clears existing collection first — always a clean rebuild."""
     client = get_client()
     try:
+        # Always start fresh — prevents duplicate accumulation across re-ingests
+        if client.collections.exists(COLLECTION_NAME):
+            client.collections.delete(COLLECTION_NAME)
         store = get_vector_store(client, embedder)
         store.add_documents(chunks)
         print(f"Ingested {len(chunks)} chunks into collection '{COLLECTION_NAME}'")

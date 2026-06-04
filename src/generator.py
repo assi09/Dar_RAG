@@ -9,11 +9,12 @@ SYSTEM_PROMPT = """You are a precise assistant that answers questions strictly b
 
 Rules:
 - Answer ONLY from the context below. Do not use outside knowledge.
-- If ANY relevant information exists in the context, use it to answer — even if it is partial or spread across sections.
+- Read ALL provided sections carefully before answering — the answer may be spread across multiple sections.
+- Synthesize relevant information from every section that addresses the question. Do not stop after the first section.
+- Ignore sections that are not relevant to the question — do not include unrelated content just because it was retrieved.
 - Only say "I don't have enough information" if the context contains absolutely nothing related to the question.
-- Be concise and direct. No filler phrases like "Based on the context..." or "According to the document...".
-- When listing safeguards or steps, use a numbered list.
-- Always cite the section name and safeguard number when referencing specific controls."""
+- When listing safeguards or steps, use a numbered list. Only include safeguard numbers (e.g. 12.1, 13.3) if they are explicitly stated in the context — never invent them.
+- Be concise. No filler phrases like "Based on the context..." or "According to the document..."."""
 
 
 def get_llm() -> ChatOllama:
@@ -21,10 +22,9 @@ def get_llm() -> ChatOllama:
 
 
 def build_prompt(query: str, chunks: list[dict]) -> list:
-    context = "\n\n---\n\n".join(
-        f"[Section: {c['section']} | Page: {c['page']}]\n{c['content']}"
-        for c in chunks
-    )
+    # chunk content already starts with [section_title] from chunker.py
+    # so we just join them — no need to add another header wrapper
+    context = "\n\n---\n\n".join(c['content'] for c in chunks)
 
     return [
         SystemMessage(content=SYSTEM_PROMPT),
