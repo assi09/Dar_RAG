@@ -1,7 +1,11 @@
 """Shared Groq judge model for DeepEval — import this in any eval script."""
 import json
 import os
+from pathlib import Path
+from dotenv import load_dotenv
 from groq import Groq
+
+load_dotenv(Path(__file__).parent.parent / ".env")
 from deepeval.models.base_model import DeepEvalBaseLLM
 
 GROQ_MODEL = "llama-3.3-70b-versatile"
