@@ -23,6 +23,8 @@ from deepeval.metrics import (
     AnswerRelevancyMetric,
     ContextualPrecisionMetric,
     ContextualRecallMetric,
+    ContextualRelevancyMetric,
+    HallucinationMetric,
 )
 
 from groq_judge import GroqJudge
@@ -66,6 +68,7 @@ def build_test_cases(dataset: list[dict]) -> list[LLMTestCase]:
                 actual_output=actual_output,
                 expected_output=entry["ground_truth_answer"],
                 retrieval_context=[c["content"] for c in chunks],
+                context=[entry["ground_truth_answer"]],  # required by HallucinationMetric
             ))
     finally:
         client.close()
@@ -88,7 +91,8 @@ def main():
     print(f"Judge        : {judge.get_model_name()}")
     print(f"Dataset      : manual golden dataset (data/golden_dataset.json)")
     print(f"Test cases   : {len(dataset)}")
-    print(f"Metrics      : Faithfulness, Answer Relevancy, Contextual Precision, Contextual Recall\n")
+    print(f"Metrics      : Faithfulness, Answer Relevancy, Contextual Precision, Contextual Recall,")
+    print(f"               Contextual Relevancy, Hallucination\n")
 
     print("=" * 60)
     print("STEP 1 — Running RAG pipeline...")
@@ -96,10 +100,12 @@ def main():
     test_cases = build_test_cases(dataset)
 
     metrics = [
-        FaithfulnessMetric(threshold=0.7,       model=judge, include_reason=True),
-        AnswerRelevancyMetric(threshold=0.7,     model=judge, include_reason=True),
-        ContextualPrecisionMetric(threshold=0.6, model=judge, include_reason=True),
-        ContextualRecallMetric(threshold=0.6,    model=judge, include_reason=True),
+        FaithfulnessMetric(threshold=0.7,        model=judge, include_reason=True),
+        AnswerRelevancyMetric(threshold=0.7,      model=judge, include_reason=True),
+        ContextualPrecisionMetric(threshold=0.6,  model=judge, include_reason=True),
+        ContextualRecallMetric(threshold=0.6,     model=judge, include_reason=True),
+        ContextualRelevancyMetric(threshold=0.6,  model=judge, include_reason=True),
+        HallucinationMetric(threshold=0.5,        model=judge, include_reason=True),
     ]
 
     print("\n" + "=" * 60)

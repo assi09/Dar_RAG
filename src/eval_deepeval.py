@@ -28,6 +28,8 @@ from deepeval.metrics import (
     AnswerRelevancyMetric,
     ContextualPrecisionMetric,
     ContextualRecallMetric,
+    ContextualRelevancyMetric,
+    HallucinationMetric,
 )
 
 from reranker import retrieve_and_rerank
@@ -50,6 +52,7 @@ def build_test_cases(dataset: list[dict]) -> list[LLMTestCase]:
             actual_output=actual_output,
             expected_output=entry["ground_truth_answer"],
             retrieval_context=retrieval_context,
+            context=[entry["ground_truth_answer"]],  # required by HallucinationMetric
         ))
     return test_cases
 
@@ -63,8 +66,9 @@ def main():
 
     print(f"Judge model  : {JUDGE_MODEL}")
     print(f"Test cases   : {len(dataset)}")
-    print(f"Metrics      : Faithfulness, Answer Relevancy, Contextual Precision, Contextual Recall")
-    print(f"Thresholds   : Faithfulness≥0.7, Relevancy≥0.7, Precision≥0.6, Recall≥0.6\n")
+    print(f"Metrics      : Faithfulness, Answer Relevancy, Contextual Precision, Contextual Recall,")
+    print(f"               Contextual Relevancy, Hallucination")
+    print(f"Thresholds   : Faithfulness≥0.7, Relevancy≥0.7, Precision≥0.6, Recall≥0.6, Relevancy≥0.6, Hallucination≤0.5\n")
 
     print("=" * 60)
     print("STEP 1 — Running RAG pipeline on all golden questions...")
@@ -78,6 +82,8 @@ def main():
         AnswerRelevancyMetric(threshold=0.7,      model=judge, include_reason=True),
         ContextualPrecisionMetric(threshold=0.6,  model=judge, include_reason=True),
         ContextualRecallMetric(threshold=0.6,     model=judge, include_reason=True),
+        ContextualRelevancyMetric(threshold=0.6,  model=judge, include_reason=True),
+        HallucinationMetric(threshold=0.5,        model=judge, include_reason=True),
     ]
 
     print("\n" + "=" * 60)
