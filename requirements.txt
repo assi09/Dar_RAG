@@ -31,3 +31,4 @@ python-dotenv
 
 # Evaluation
 deepeval>=4.0.5
+groq>=1.4.0
