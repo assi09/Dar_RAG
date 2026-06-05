@@ -29,6 +29,11 @@ notebook>=7.5.6
 # Utilities
 python-dotenv
 
+# API + Feedback
+fastapi>=0.136.3
+uvicorn>=0.49.0
+langsmith>=0.8.8
+
 # Evaluation
 deepeval>=4.0.5
 groq>=1.4.0
