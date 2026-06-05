@@ -13,9 +13,11 @@ Setup:
   Run:
     HF_HUB_DISABLE_XET=1 uvicorn src.api:app --reload --port 8000
 """
+import json
 import os
 import sys
 import uuid
+from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -66,6 +68,22 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     status: str
     feedback_id: str
+
+
+# ── Persistence ─────────────────────────────────────────────────────────────
+FEEDBACK_FILE = Path(__file__).parent.parent / "data" / "feedback_log.json"
+
+
+def _load_feedback() -> list[dict]:
+    if FEEDBACK_FILE.exists():
+        return json.loads(FEEDBACK_FILE.read_text())
+    return []
+
+
+def _save_feedback(entry: dict):
+    log = _load_feedback()
+    log.append(entry)
+    FEEDBACK_FILE.write_text(json.dumps(log, indent=2))
 
 
 # ── In-memory run store (maps run_id → question + answer for LangSmith log) ──
@@ -126,26 +144,42 @@ def feedback(request: FeedbackRequest):
 
     feedback_id = str(uuid.uuid4())
 
+    run = _runs[request.run_id]
+
+    # Always save locally to data/feedback_log.json
+    entry = {
+        "feedback_id": feedback_id,
+        "run_id": request.run_id,
+        "timestamp": datetime.utcnow().isoformat(),
+        "score": request.score,
+        "comment": request.comment,
+        "question": run["question"],
+        "answer": run["answer"],
+        "sources": run["sources"],
+    }
+    _save_feedback(entry)
+
+    # Also send to LangSmith if configured
     if os.environ.get("LANGCHAIN_TRACING_V2") == "true":
         try:
             ls = LangSmithClient()
             ls.create_feedback(
                 run_id=request.run_id,
                 key="user_feedback",
-                score=float(request.score),     # 1.0 = positive, 0.0 = negative
+                score=float(request.score),
                 comment=request.comment or None,
                 feedback_id=feedback_id,
             )
-        except Exception as e:
-            raise HTTPException(status_code=502, detail=f"LangSmith error: {e}")
-    else:
-        # LangSmith not configured — store locally for dev/testing
-        run = _runs[request.run_id]
-        print(f"[FEEDBACK] run={request.run_id} | score={request.score} | comment={request.comment!r}")
-        print(f"  question: {run['question']}")
-        print(f"  answer  : {run['answer'][:100]}...")
+        except Exception:
+            pass  # local save already succeeded
 
     return FeedbackResponse(status="ok", feedback_id=feedback_id)
+
+
+@app.get("/api/feedback")
+def get_feedback():
+    """Retrieve all saved feedback entries from data/feedback_log.json."""
+    return {"feedback": _load_feedback(), "total": len(_load_feedback())}
 
 
 @app.get("/api/health")
