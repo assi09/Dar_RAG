@@ -22,6 +22,8 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -34,7 +36,7 @@ if os.environ.get("LANGSMITH_API_KEY"):
 sys.path.insert(0, str(Path(__file__).parent))
 
 from reranker import retrieve_and_rerank
-from generator import generate
+from generator import generate, generate_stream
 from langsmith import Client as LangSmithClient
 
 
@@ -44,6 +46,13 @@ app = FastAPI(
     title="Dar RAG API",
     description="CIS Controls v8 RAG pipeline with human feedback via LangSmith",
     version="1.0.0",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173", "http://localhost:3000"],
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -125,10 +134,13 @@ def query(request: QueryRequest):
         except Exception:
             pass  # feedback logging is non-blocking
 
-    sources = [
-        {"section": c["section"], "page": str(c["page"])}
-        for c in chunks
-    ]
+    seen: set[tuple] = set()
+    sources = []
+    for c in chunks:
+        key = (c["section"], int(float(c["page"])))
+        if key not in seen:
+            seen.add(key)
+            sources.append({"section": c["section"], "page": str(key[1])})
 
     return QueryResponse(answer=answer, run_id=run_id, sources=sources)
 
@@ -180,6 +192,49 @@ def feedback(request: FeedbackRequest):
 def get_feedback():
     """Retrieve all saved feedback entries from data/feedback_log.json."""
     return {"feedback": _load_feedback(), "total": len(_load_feedback())}
+
+
+@app.post("/api/query/stream")
+def query_stream(request: QueryRequest):
+    """Stream the RAG answer as Server-Sent Events (text/event-stream).
+
+    Event sequence:
+      data: {"type": "meta",  "run_id": "...", "sources": [...]}
+      data: {"type": "chunk", "content": "..."}   (repeated per token)
+      data: {"type": "done"}
+    """
+    if not request.question.strip():
+        raise HTTPException(status_code=400, detail="question must not be empty")
+
+    chunks = retrieve_and_rerank(request.question)
+    run_id = str(uuid.uuid4())
+
+    # Deduplicate by section+page (multiple chunks from the same section are
+    # useful for generation but redundant in the sources display)
+    seen_sources: set[tuple] = set()
+    sources = []
+    for c in chunks:
+        key = (c["section"], int(float(c["page"])))
+        if key not in seen_sources:
+            seen_sources.add(key)
+            sources.append({"section": c["section"], "page": str(key[1])})
+
+    _runs[run_id] = {"question": request.question, "answer": "", "sources": sources}
+
+    def event_generator():
+        yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'sources': sources})}\n\n"
+        full = []
+        for token in generate_stream(request.question, chunks):
+            full.append(token)
+            yield f"data: {json.dumps({'type': 'chunk', 'content': token})}\n\n"
+        _runs[run_id]["answer"] = "".join(full)
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
 
 
 @app.get("/api/health")

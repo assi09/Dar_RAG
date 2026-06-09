@@ -40,6 +40,15 @@ def generate(query: str, chunks: list[dict]) -> str:
     return response.content
 
 
+def generate_stream(query: str, chunks: list[dict]):
+    """Yield tokens from llama3.2 one at a time for SSE streaming."""
+    llm = get_llm()
+    messages = build_prompt(query, chunks)
+    for token in llm.stream(messages):
+        if token.content:
+            yield token.content
+
+
 if __name__ == "__main__":
     # Quick test with hardcoded context
     test_chunks = [
