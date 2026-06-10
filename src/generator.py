@@ -17,24 +17,24 @@ Rules:
 - Be concise. No filler phrases like "Based on the context..." or "According to the document..."."""
 
 
-CHAT_SYSTEM_PROMPT = """You are Dar, a friendly assistant for a CIS Controls v8 knowledge base.
-
-The user just sent a casual message (greeting, thanks, small talk, or a question about
-what you can do) rather than a question about CIS Controls v8. Reply briefly and warmly
-in plain conversational language — do not mention "context" or "documents". If it fits
-naturally, mention that you can answer questions about CIS Controls v8 safeguards."""
-
-
 CLASSIFIER_PROMPT = """Classify the user's message as either "rag" or "chat".
 
 - "rag": the message asks a question about CIS Controls v8, cybersecurity safeguards, \
 or related security/compliance topics that should be answered from a reference document.
-- "chat": the message is casual conversation — greetings, thanks, small talk, or a \
-general question about the assistant itself (not requiring document lookup).
+- "chat": anything else — greetings, small talk, thanks, or questions unrelated to \
+CIS Controls v8 (e.g. general knowledge, other subjects, requests for the assistant \
+to do something off-topic).
 
 Respond with exactly one word, "rag" or "chat", and nothing else.
 
 Message: {message}"""
+
+
+CHAT_REPLY = (
+    "I'm a CIS Controls v8 assistant, so I can only help with questions about "
+    "those security controls and safeguards. Try asking something like "
+    "\"What does Control 8 say about audit log retention?\""
+)
 
 
 def get_llm() -> ChatOllama:
@@ -70,7 +70,7 @@ def generate_stream(query: str, chunks: list[dict]):
 
 
 def classify_query(query: str) -> str:
-    """Classify a message as 'rag' (needs document retrieval) or 'chat' (casual)."""
+    """Classify a message as 'rag' (needs document retrieval) or 'chat' (anything else)."""
     llm = get_llm()
     response = llm.invoke([HumanMessage(content=CLASSIFIER_PROMPT.format(message=query))])
     label = response.content.strip().lower()
@@ -78,12 +78,10 @@ def classify_query(query: str) -> str:
 
 
 def generate_chat_stream(query: str):
-    """Yield tokens for a casual conversational reply (no document context)."""
-    llm = get_llm()
-    messages = [SystemMessage(content=CHAT_SYSTEM_PROMPT), HumanMessage(content=query)]
-    for token in llm.stream(messages):
-        if token.content:
-            yield token.content
+    """Yield a fixed redirect reply for non-CIS-Controls messages, word by word."""
+    words = CHAT_REPLY.split(" ")
+    for i, word in enumerate(words):
+        yield word + (" " if i < len(words) - 1 else "")
 
 
 if __name__ == "__main__":
