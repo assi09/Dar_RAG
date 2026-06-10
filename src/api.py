@@ -38,6 +38,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from reranker import retrieve_and_rerank
 from generator import generate, generate_stream
 from langsmith import Client as LangSmithClient
+import db
 
 
 # ── FastAPI app ──────────────────────────────────────────────────────────────
@@ -55,11 +56,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+db.init_db()
+
 
 # ── Request / Response models ────────────────────────────────────────────────
 
 class QueryRequest(BaseModel):
     question: str
+    conversation_id: str | None = None
 
 
 class QueryResponse(BaseModel):
@@ -77,6 +81,32 @@ class FeedbackRequest(BaseModel):
 class FeedbackResponse(BaseModel):
     status: str
     feedback_id: str
+
+
+class ConversationSummary(BaseModel):
+    id: str
+    title: str
+    created_at: str
+    updated_at: str
+
+
+class MessageOut(BaseModel):
+    id: str
+    role: str
+    content: str
+    sources: list[dict]
+    run_id: str | None
+    created_at: str
+
+
+class ConversationDetail(ConversationSummary):
+    messages: list[MessageOut]
+
+
+def _make_title(question: str) -> str:
+    """Derive a short conversation title from the first user question."""
+    title = " ".join(question.strip().split())
+    return title[:50] + ("…" if len(title) > 50 else "")
 
 
 # ── Persistence ─────────────────────────────────────────────────────────────
@@ -194,12 +224,45 @@ def get_feedback():
     return {"feedback": _load_feedback(), "total": len(_load_feedback())}
 
 
+@app.post("/api/conversations", response_model=ConversationSummary)
+def create_conversation():
+    """Start a new, empty conversation."""
+    conversation_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    db.create_conversation(conversation_id, "New conversation", now)
+    return ConversationSummary(id=conversation_id, title="New conversation", created_at=now, updated_at=now)
+
+
+@app.get("/api/conversations", response_model=list[ConversationSummary])
+def list_conversations():
+    """List all conversations, most recently updated first."""
+    return db.list_conversations()
+
+
+@app.get("/api/conversations/{conversation_id}", response_model=ConversationDetail)
+def get_conversation(conversation_id: str):
+    """Fetch a conversation and its full message history."""
+    convo = db.get_conversation(conversation_id)
+    if convo is None:
+        raise HTTPException(status_code=404, detail=f"conversation '{conversation_id}' not found")
+    return convo
+
+
+@app.delete("/api/conversations/{conversation_id}")
+def delete_conversation(conversation_id: str):
+    """Delete a conversation and its messages."""
+    if db.get_conversation(conversation_id) is None:
+        raise HTTPException(status_code=404, detail=f"conversation '{conversation_id}' not found")
+    db.delete_conversation(conversation_id)
+    return {"status": "ok"}
+
+
 @app.post("/api/query/stream")
 def query_stream(request: QueryRequest):
     """Stream the RAG answer as Server-Sent Events (text/event-stream).
 
     Event sequence:
-      data: {"type": "meta",  "run_id": "...", "sources": [...]}
+      data: {"type": "meta",  "run_id": "...", "conversation_id": "...", "sources": [...]}
       data: {"type": "chunk", "content": "..."}   (repeated per token)
       data: {"type": "done"}
     """
@@ -208,6 +271,15 @@ def query_stream(request: QueryRequest):
 
     chunks = retrieve_and_rerank(request.question)
     run_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+
+    # Resume an existing conversation, or start a new one
+    conversation_id = request.conversation_id
+    if conversation_id is None or db.get_conversation(conversation_id) is None:
+        conversation_id = str(uuid.uuid4())
+        db.create_conversation(conversation_id, _make_title(request.question), now)
+
+    db.add_message(str(uuid.uuid4()), conversation_id, "user", request.question, [], None, now)
 
     # Deduplicate by section+page (multiple chunks from the same section are
     # useful for generation but redundant in the sources display)
@@ -222,12 +294,14 @@ def query_stream(request: QueryRequest):
     _runs[run_id] = {"question": request.question, "answer": "", "sources": sources}
 
     def event_generator():
-        yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'sources': sources})}\n\n"
+        yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'conversation_id': conversation_id, 'sources': sources})}\n\n"
         full = []
         for token in generate_stream(request.question, chunks):
             full.append(token)
             yield f"data: {json.dumps({'type': 'chunk', 'content': token})}\n\n"
-        _runs[run_id]["answer"] = "".join(full)
+        answer = "".join(full)
+        _runs[run_id]["answer"] = answer
+        db.add_message(str(uuid.uuid4()), conversation_id, "assistant", answer, sources, run_id, datetime.utcnow().isoformat())
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
