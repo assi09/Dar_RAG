@@ -36,7 +36,7 @@ if os.environ.get("LANGSMITH_API_KEY"):
 sys.path.insert(0, str(Path(__file__).parent))
 
 from reranker import retrieve_and_rerank
-from generator import generate, generate_stream, classify_query, generate_chat_stream
+from generator import generate, generate_stream, classify_query, generate_chat_stream, generate_off_topic_stream
 from langsmith import Client as LangSmithClient
 import db
 
@@ -280,13 +280,14 @@ def query_stream(request: QueryRequest):
 
     db.add_message(str(uuid.uuid4()), conversation_id, "user", request.question, [], None, now)
 
-    # Casual messages (greetings, thanks, small talk) skip retrieval entirely —
-    # vector search always returns "closest" chunks even when nothing is relevant.
-    is_chat = classify_query(request.question) == "chat"
+    # Casual greetings skip retrieval and get a friendly reply; off-topic questions
+    # get a fixed redirect; only "rag" messages hit the document pipeline — vector
+    # search always returns "closest" chunks even when nothing is relevant.
+    classification = classify_query(request.question)
 
     sources = []
     chunks = []
-    if not is_chat:
+    if classification == "rag":
         chunks = retrieve_and_rerank(request.question)
 
         # Deduplicate by section+page (multiple chunks from the same section are
@@ -303,7 +304,12 @@ def query_stream(request: QueryRequest):
     def event_generator():
         yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'conversation_id': conversation_id, 'sources': sources})}\n\n"
         full = []
-        token_gen = generate_chat_stream(request.question) if is_chat else generate_stream(request.question, chunks)
+        if classification == "rag":
+            token_gen = generate_stream(request.question, chunks)
+        elif classification == "greeting":
+            token_gen = generate_chat_stream(request.question)
+        else:
+            token_gen = generate_off_topic_stream()
         for token in token_gen:
             full.append(token)
             yield f"data: {json.dumps({'type': 'chunk', 'content': token})}\n\n"

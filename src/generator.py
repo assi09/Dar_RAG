@@ -17,20 +17,29 @@ Rules:
 - Be concise. No filler phrases like "Based on the context..." or "According to the document..."."""
 
 
-CLASSIFIER_PROMPT = """Classify the user's message as either "rag" or "chat".
+CHAT_SYSTEM_PROMPT = """You are Dar, a friendly assistant for a CIS Controls v8 knowledge base.
 
-- "rag": the message asks a question about CIS Controls v8, cybersecurity safeguards, \
-or related security/compliance topics that should be answered from a reference document.
-- "chat": anything else — greetings, small talk, thanks, or questions unrelated to \
-CIS Controls v8 (e.g. general knowledge, other subjects, requests for the assistant \
-to do something off-topic).
+The user just sent a casual message (greeting, thanks, small talk, or a question about
+what you can do) rather than a question about CIS Controls v8. Reply briefly and warmly
+in plain conversational language — do not mention "context" or "documents". If it fits
+naturally, mention that you can answer questions about CIS Controls v8 safeguards."""
 
-Respond with exactly one word, "rag" or "chat", and nothing else.
+
+CLASSIFIER_PROMPT = """Classify the user's message into exactly one of three categories:
+
+- "rag": a question about CIS Controls v8, cybersecurity safeguards, or related \
+security/compliance topics that should be answered from a reference document.
+- "greeting": casual greetings, thanks, goodbyes, or small talk directed at the \
+assistant itself (e.g. "hi", "thanks", "how are you", "what can you do").
+- "off_topic": anything else — general knowledge questions or requests unrelated to \
+CIS Controls v8 or security (e.g. math, science, history, coding help, other subjects).
+
+Respond with exactly one word: "rag", "greeting", or "off_topic", and nothing else.
 
 Message: {message}"""
 
 
-CHAT_REPLY = (
+OFF_TOPIC_REPLY = (
     "I'm a CIS Controls v8 assistant, so I can only help with questions about "
     "those security controls and safeguards. Try asking something like "
     "\"What does Control 8 say about audit log retention?\""
@@ -70,16 +79,29 @@ def generate_stream(query: str, chunks: list[dict]):
 
 
 def classify_query(query: str) -> str:
-    """Classify a message as 'rag' (needs document retrieval) or 'chat' (anything else)."""
+    """Classify a message as 'rag', 'greeting', or 'off_topic'."""
     llm = get_llm()
     response = llm.invoke([HumanMessage(content=CLASSIFIER_PROMPT.format(message=query))])
     label = response.content.strip().lower()
-    return "chat" if "chat" in label else "rag"
+    if "off_topic" in label or "off-topic" in label:
+        return "off_topic"
+    if "greeting" in label:
+        return "greeting"
+    return "rag"
 
 
 def generate_chat_stream(query: str):
-    """Yield a fixed redirect reply for non-CIS-Controls messages, word by word."""
-    words = CHAT_REPLY.split(" ")
+    """Yield tokens for a casual conversational reply (no document context)."""
+    llm = get_llm()
+    messages = [SystemMessage(content=CHAT_SYSTEM_PROMPT), HumanMessage(content=query)]
+    for token in llm.stream(messages):
+        if token.content:
+            yield token.content
+
+
+def generate_off_topic_stream():
+    """Yield a fixed redirect reply for non-CIS-Controls questions, word by word."""
+    words = OFF_TOPIC_REPLY.split(" ")
     for i, word in enumerate(words):
         yield word + (" " if i < len(words) - 1 else "")
 
