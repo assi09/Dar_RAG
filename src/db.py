@@ -120,6 +120,16 @@ def add_message(
     conn.close()
 
 
+def rename_conversation(conversation_id: str, title: str, updated_at: str):
+    conn = get_db()
+    conn.execute(
+        "UPDATE conversations SET title = ?, updated_at = ? WHERE id = ?",
+        (title, updated_at, conversation_id),
+    )
+    conn.commit()
+    conn.close()
+
+
 def delete_conversation(conversation_id: str):
     conn = get_db()
     conn.execute("DELETE FROM messages WHERE conversation_id = ?", (conversation_id,))

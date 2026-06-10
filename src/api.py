@@ -103,6 +103,10 @@ class ConversationDetail(ConversationSummary):
     messages: list[MessageOut]
 
 
+class RenameConversationRequest(BaseModel):
+    title: str
+
+
 def _make_title(question: str) -> str:
     """Derive a short conversation title from the first user question."""
     title = " ".join(question.strip().split())
@@ -246,6 +250,22 @@ def get_conversation(conversation_id: str):
     if convo is None:
         raise HTTPException(status_code=404, detail=f"conversation '{conversation_id}' not found")
     return convo
+
+
+@app.patch("/api/conversations/{conversation_id}", response_model=ConversationSummary)
+def rename_conversation(conversation_id: str, request: RenameConversationRequest):
+    """Rename a conversation."""
+    convo = db.get_conversation(conversation_id)
+    if convo is None:
+        raise HTTPException(status_code=404, detail=f"conversation '{conversation_id}' not found")
+
+    title = request.title.strip()
+    if not title:
+        raise HTTPException(status_code=400, detail="title must not be empty")
+
+    now = datetime.utcnow().isoformat()
+    db.rename_conversation(conversation_id, title, now)
+    return ConversationSummary(id=conversation_id, title=title, created_at=convo["created_at"], updated_at=now)
 
 
 @app.delete("/api/conversations/{conversation_id}")
