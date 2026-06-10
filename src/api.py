@@ -36,7 +36,7 @@ if os.environ.get("LANGSMITH_API_KEY"):
 sys.path.insert(0, str(Path(__file__).parent))
 
 from reranker import retrieve_and_rerank
-from generator import generate, generate_stream
+from generator import generate, generate_stream, classify_query, generate_chat_stream
 from langsmith import Client as LangSmithClient
 import db
 
@@ -269,7 +269,6 @@ def query_stream(request: QueryRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="question must not be empty")
 
-    chunks = retrieve_and_rerank(request.question)
     run_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
 
@@ -281,22 +280,31 @@ def query_stream(request: QueryRequest):
 
     db.add_message(str(uuid.uuid4()), conversation_id, "user", request.question, [], None, now)
 
-    # Deduplicate by section+page (multiple chunks from the same section are
-    # useful for generation but redundant in the sources display)
-    seen_sources: set[tuple] = set()
+    # Casual messages (greetings, thanks, small talk) skip retrieval entirely —
+    # vector search always returns "closest" chunks even when nothing is relevant.
+    is_chat = classify_query(request.question) == "chat"
+
     sources = []
-    for c in chunks:
-        key = (c["section"], int(float(c["page"])))
-        if key not in seen_sources:
-            seen_sources.add(key)
-            sources.append({"section": c["section"], "page": str(key[1])})
+    chunks = []
+    if not is_chat:
+        chunks = retrieve_and_rerank(request.question)
+
+        # Deduplicate by section+page (multiple chunks from the same section are
+        # useful for generation but redundant in the sources display)
+        seen_sources: set[tuple] = set()
+        for c in chunks:
+            key = (c["section"], int(float(c["page"])))
+            if key not in seen_sources:
+                seen_sources.add(key)
+                sources.append({"section": c["section"], "page": str(key[1])})
 
     _runs[run_id] = {"question": request.question, "answer": "", "sources": sources}
 
     def event_generator():
         yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'conversation_id': conversation_id, 'sources': sources})}\n\n"
         full = []
-        for token in generate_stream(request.question, chunks):
+        token_gen = generate_chat_stream(request.question) if is_chat else generate_stream(request.question, chunks)
+        for token in token_gen:
             full.append(token)
             yield f"data: {json.dumps({'type': 'chunk', 'content': token})}\n\n"
         answer = "".join(full)

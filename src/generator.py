@@ -17,6 +17,26 @@ Rules:
 - Be concise. No filler phrases like "Based on the context..." or "According to the document..."."""
 
 
+CHAT_SYSTEM_PROMPT = """You are Dar, a friendly assistant for a CIS Controls v8 knowledge base.
+
+The user just sent a casual message (greeting, thanks, small talk, or a question about
+what you can do) rather than a question about CIS Controls v8. Reply briefly and warmly
+in plain conversational language — do not mention "context" or "documents". If it fits
+naturally, mention that you can answer questions about CIS Controls v8 safeguards."""
+
+
+CLASSIFIER_PROMPT = """Classify the user's message as either "rag" or "chat".
+
+- "rag": the message asks a question about CIS Controls v8, cybersecurity safeguards, \
+or related security/compliance topics that should be answered from a reference document.
+- "chat": the message is casual conversation — greetings, thanks, small talk, or a \
+general question about the assistant itself (not requiring document lookup).
+
+Respond with exactly one word, "rag" or "chat", and nothing else.
+
+Message: {message}"""
+
+
 def get_llm() -> ChatOllama:
     return ChatOllama(model=LLM_MODEL, temperature=TEMPERATURE)
 
@@ -44,6 +64,23 @@ def generate_stream(query: str, chunks: list[dict]):
     """Yield tokens from llama3.2 one at a time for SSE streaming."""
     llm = get_llm()
     messages = build_prompt(query, chunks)
+    for token in llm.stream(messages):
+        if token.content:
+            yield token.content
+
+
+def classify_query(query: str) -> str:
+    """Classify a message as 'rag' (needs document retrieval) or 'chat' (casual)."""
+    llm = get_llm()
+    response = llm.invoke([HumanMessage(content=CLASSIFIER_PROMPT.format(message=query))])
+    label = response.content.strip().lower()
+    return "chat" if "chat" in label else "rag"
+
+
+def generate_chat_stream(query: str):
+    """Yield tokens for a casual conversational reply (no document context)."""
+    llm = get_llm()
+    messages = [SystemMessage(content=CHAT_SYSTEM_PROMPT), HumanMessage(content=query)]
     for token in llm.stream(messages):
         if token.content:
             yield token.content
