@@ -8,5 +8,6 @@ data/docs/
 data/.record_manager.db
 data/.file_hashes.json
 data/feedback_log.json
+data/dar.db
 
 *.Identifier
