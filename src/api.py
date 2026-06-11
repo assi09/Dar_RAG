@@ -79,9 +79,13 @@ class QueryResponse(BaseModel):
     sources: list[SourceItem]  # retrieved sections for transparency
 
 
+REASON_CHOICES = {"incorrect", "incomplete", "not_relevant", "unclear", "other"}
+
+
 class FeedbackRequest(BaseModel):
     run_id: str
     score: int                 # 1 = thumbs up, 0 = thumbs down
+    reason: str | None = None  # required when score == 0, one of REASON_CHOICES
     comment: str = ""          # optional text feedback
 
 
@@ -141,22 +145,6 @@ def _make_title(question: str) -> str:
     return title[:50] + ("…" if len(title) > 50 else "")
 
 
-# ── Persistence ─────────────────────────────────────────────────────────────
-FEEDBACK_FILE = Path(__file__).parent.parent / "data" / "feedback_log.json"
-
-
-def _load_feedback() -> list[dict]:
-    if FEEDBACK_FILE.exists():
-        return json.loads(FEEDBACK_FILE.read_text())
-    return []
-
-
-def _save_feedback(entry: dict):
-    log = _load_feedback()
-    log.append(entry)
-    FEEDBACK_FILE.write_text(json.dumps(log, indent=2))
-
-
 # ── In-memory run store (maps run_id → question + answer for LangSmith log) ──
 _runs: dict[str, dict] = {}
 
@@ -206,35 +194,37 @@ def feedback(request: FeedbackRequest):
     if request.score not in (0, 1):
         raise HTTPException(status_code=400, detail="score must be 0 (down) or 1 (up)")
 
+    if request.score == 0 and request.reason not in REASON_CHOICES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"reason is required for negative feedback and must be one of {sorted(REASON_CHOICES)}",
+        )
+
     if request.run_id not in _runs:
         raise HTTPException(status_code=404, detail=f"run_id '{request.run_id}' not found")
 
     feedback_id = str(uuid.uuid4())
 
     run = _runs[request.run_id]
+    now = datetime.utcnow().isoformat()
 
-    # Always save locally to data/feedback_log.json
-    entry = {
-        "feedback_id": feedback_id,
-        "run_id": request.run_id,
-        "timestamp": datetime.utcnow().isoformat(),
-        "score": request.score,
-        "comment": request.comment,
-        "question": run["question"],
-        "answer": run["answer"],
-        "sources": run["sources"],
-    }
-    _save_feedback(entry)
+    db.add_feedback(
+        feedback_id, request.run_id, request.score, request.reason, request.comment,
+        run["question"], run["answer"], run["sources"], now,
+    )
 
     # Also send to LangSmith if configured
     if os.environ.get("LANGCHAIN_TRACING_V2") == "true":
         try:
             ls = LangSmithClient()
+            comment = request.comment or None
+            if request.score == 0 and request.reason:
+                comment = f"[{request.reason}] {comment or ''}".strip()
             ls.create_feedback(
                 run_id=request.run_id,
                 key="user_feedback",
                 score=float(request.score),
-                comment=request.comment or None,
+                comment=comment,
                 feedback_id=feedback_id,
             )
         except Exception:
@@ -245,8 +235,9 @@ def feedback(request: FeedbackRequest):
 
 @app.get("/api/feedback")
 def get_feedback():
-    """Retrieve all saved feedback entries from data/feedback_log.json."""
-    return {"feedback": _load_feedback(), "total": len(_load_feedback())}
+    """Retrieve all saved feedback entries from the database."""
+    entries = db.list_feedback()
+    return {"feedback": entries, "total": len(entries)}
 
 
 @app.post("/api/conversations", response_model=ConversationSummary)
