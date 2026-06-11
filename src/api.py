@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 load_dotenv(Path(__file__).parent.parent / ".env")
@@ -55,6 +56,14 @@ app.add_middleware(
     allow_origins=["http://localhost:5173", "http://localhost:3000"],
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+# Serve source PDFs (e.g. CIS Controls v8) so the frontend can render the
+# original document alongside cited passages.
+app.mount(
+    "/documents",
+    StaticFiles(directory=Path(__file__).parent.parent / "rag_setup" / "data"),
+    name="documents",
 )
 
 db.init_db()
