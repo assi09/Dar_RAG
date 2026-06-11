@@ -313,9 +313,10 @@ def query_stream(request: QueryRequest):
         sources, citation_numbers = dedupe_sources(chunks)
 
     _runs[run_id] = {"question": request.question, "answer": "", "sources": sources}
+    assistant_message_id = str(uuid.uuid4())
 
     def event_generator():
-        yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'conversation_id': conversation_id, 'sources': sources})}\n\n"
+        yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'conversation_id': conversation_id, 'message_id': assistant_message_id, 'sources': sources})}\n\n"
         full = []
         if classification == "rag":
             token_gen = generate_stream(request.question, chunks, citation_numbers)
@@ -328,7 +329,7 @@ def query_stream(request: QueryRequest):
             yield f"data: {json.dumps({'type': 'chunk', 'content': token})}\n\n"
         answer = "".join(full)
         _runs[run_id]["answer"] = answer
-        db.add_message(str(uuid.uuid4()), conversation_id, "assistant", answer, sources, run_id, datetime.utcnow().isoformat())
+        db.add_message(assistant_message_id, conversation_id, "assistant", answer, sources, run_id, datetime.utcnow().isoformat())
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
