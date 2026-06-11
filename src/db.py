@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at TEXT NOT NULL,
     FOREIGN KEY (conversation_id) REFERENCES conversations(id)
 );
+
+CREATE TABLE IF NOT EXISTS message_versions (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    version_index INTEGER NOT NULL,
+    content TEXT NOT NULL,
+    sources TEXT,
+    run_id TEXT,
+    created_at TEXT NOT NULL,
+    FOREIGN KEY (message_id) REFERENCES messages(id)
+);
 """
 
 
@@ -48,6 +59,11 @@ def get_db() -> sqlite3.Connection:
 def init_db():
     conn = get_db()
     conn.executescript(SCHEMA)
+
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(messages)")}
+    if "active_version" not in columns:
+        conn.execute("ALTER TABLE messages ADD COLUMN active_version INTEGER NOT NULL DEFAULT 1")
+
     conn.commit()
     conn.close()
 
@@ -82,18 +98,26 @@ def get_conversation(conversation_id: str) -> dict | None:
         return None
 
     messages = conn.execute(
-        "SELECT id, role, content, sources, run_id, created_at FROM messages "
+        "SELECT id, role, content, sources, run_id, created_at, active_version FROM messages "
         "WHERE conversation_id = ? ORDER BY created_at ASC",
         (conversation_id,),
     ).fetchall()
+
+    out_messages = []
+    for m in messages:
+        version_count = conn.execute(
+            "SELECT COUNT(*) FROM message_versions WHERE message_id = ?", (m["id"],)
+        ).fetchone()[0]
+        out_messages.append({
+            **dict(m),
+            "sources": json.loads(m["sources"]) if m["sources"] else [],
+            "version_count": version_count or 1,
+        })
     conn.close()
 
     return {
         **dict(convo),
-        "messages": [
-            {**dict(m), "sources": json.loads(m["sources"]) if m["sources"] else []}
-            for m in messages
-        ],
+        "messages": out_messages,
     }
 
 
@@ -115,6 +139,99 @@ def add_message(
     conn.execute(
         "UPDATE conversations SET updated_at = ? WHERE id = ?",
         (created_at, conversation_id),
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_message(message_id: str) -> dict | None:
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, conversation_id, role, content, sources, run_id, created_at, active_version "
+        "FROM messages WHERE id = ?",
+        (message_id,),
+    ).fetchone()
+    conn.close()
+    if row is None:
+        return None
+    return {**dict(row), "sources": json.loads(row["sources"]) if row["sources"] else []}
+
+
+def get_preceding_user_message(conversation_id: str, message_id: str) -> dict | None:
+    """Find the nearest prior role='user' message before the given message."""
+    conn = get_db()
+    target = conn.execute(
+        "SELECT created_at FROM messages WHERE id = ?", (message_id,)
+    ).fetchone()
+    if target is None:
+        conn.close()
+        return None
+
+    row = conn.execute(
+        "SELECT id, content, created_at FROM messages "
+        "WHERE conversation_id = ? AND role = 'user' AND created_at < ? "
+        "ORDER BY created_at DESC LIMIT 1",
+        (conversation_id, target["created_at"]),
+    ).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def get_message_versions(message_id: str) -> list[dict]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, message_id, version_index, content, sources, run_id, created_at "
+        "FROM message_versions WHERE message_id = ? ORDER BY version_index ASC",
+        (message_id,),
+    ).fetchall()
+    conn.close()
+    return [
+        {**dict(r), "sources": json.loads(r["sources"]) if r["sources"] else []}
+        for r in rows
+    ]
+
+
+def count_message_versions(message_id: str) -> int:
+    conn = get_db()
+    count = conn.execute(
+        "SELECT COUNT(*) FROM message_versions WHERE message_id = ?", (message_id,)
+    ).fetchone()[0]
+    conn.close()
+    return count
+
+
+def add_message_version(
+    version_id: str,
+    message_id: str,
+    version_index: int,
+    content: str,
+    sources: list,
+    run_id: str | None,
+    created_at: str,
+):
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO message_versions (id, message_id, version_index, content, sources, run_id, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (version_id, message_id, version_index, content, json.dumps(sources), run_id, created_at),
+    )
+    conn.commit()
+    conn.close()
+
+
+def update_message(
+    message_id: str,
+    content: str,
+    sources: list,
+    run_id: str | None,
+    created_at: str,
+    active_version: int,
+):
+    conn = get_db()
+    conn.execute(
+        "UPDATE messages SET content = ?, sources = ?, run_id = ?, created_at = ?, active_version = ? "
+        "WHERE id = ?",
+        (content, json.dumps(sources), run_id, created_at, active_version, message_id),
     )
     conn.commit()
     conn.close()
