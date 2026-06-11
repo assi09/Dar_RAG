@@ -71,6 +71,7 @@ class SourceItem(BaseModel):
     section: str
     page: str
     snippet: str = ""           # excerpt of the retrieved chunk, for citation previews
+    file: str = ""              # source PDF filename, served via /documents
 
 
 class QueryResponse(BaseModel):

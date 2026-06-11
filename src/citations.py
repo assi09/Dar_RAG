@@ -22,7 +22,7 @@ def dedupe_sources(chunks: list[dict]) -> tuple[list[dict], list[int]]:
     """Deduplicate chunks by (section, page) and assign 1-based citation numbers.
 
     Returns:
-        sources: deduped list of {section, page, snippet}, in first-seen order.
+        sources: deduped list of {section, page, snippet, file}, in first-seen order.
         citation_numbers: same length as `chunks`; citation_numbers[i] is the
             1-based index into `sources` that chunks[i] maps to.
     """
@@ -38,6 +38,7 @@ def dedupe_sources(chunks: list[dict]) -> tuple[list[dict], list[int]]:
                 "section": chunk["section"],
                 "page": str(key[1]),
                 "snippet": _snippet(chunk["content"]),
+                "file": chunk.get("file", ""),
             })
         citation_numbers.append(seen[key])
 
