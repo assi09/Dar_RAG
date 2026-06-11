@@ -46,6 +46,18 @@ CREATE TABLE IF NOT EXISTS message_versions (
     created_at TEXT NOT NULL,
     FOREIGN KEY (message_id) REFERENCES messages(id)
 );
+
+CREATE TABLE IF NOT EXISTS feedback (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    score INTEGER NOT NULL,
+    reason TEXT,
+    comment TEXT,
+    question TEXT,
+    answer TEXT,
+    sources TEXT,
+    created_at TEXT NOT NULL
+);
 """
 
 
@@ -235,6 +247,40 @@ def update_message(
     )
     conn.commit()
     conn.close()
+
+
+def add_feedback(
+    feedback_id: str,
+    run_id: str,
+    score: int,
+    reason: str | None,
+    comment: str,
+    question: str,
+    answer: str,
+    sources: list,
+    created_at: str,
+):
+    conn = get_db()
+    conn.execute(
+        "INSERT INTO feedback (id, run_id, score, reason, comment, question, answer, sources, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (feedback_id, run_id, score, reason, comment, question, answer, json.dumps(sources), created_at),
+    )
+    conn.commit()
+    conn.close()
+
+
+def list_feedback() -> list[dict]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, run_id, score, reason, comment, question, answer, sources, created_at "
+        "FROM feedback ORDER BY created_at ASC"
+    ).fetchall()
+    conn.close()
+    return [
+        {**dict(r), "sources": json.loads(r["sources"]) if r["sources"] else []}
+        for r in rows
+    ]
 
 
 def rename_conversation(conversation_id: str, title: str, updated_at: str):
