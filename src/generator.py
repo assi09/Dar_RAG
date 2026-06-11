@@ -14,7 +14,10 @@ Rules:
 - Ignore sections that are not relevant to the question — do not include unrelated content just because it was retrieved.
 - Only say "I don't have enough information" if the context contains absolutely nothing related to the question.
 - When listing safeguards or steps, use a numbered list. Only include safeguard numbers (e.g. 12.1, 13.3) if they are explicitly stated in the context — never invent them.
-- Be concise. No filler phrases like "Based on the context..." or "According to the document..."."""
+- Be concise. No filler phrases like "Based on the context..." or "According to the document...".
+- Each context block below is tagged with a citation number like [1], [2], etc. When you use information from a block, cite it inline immediately after the relevant sentence or clause using its number, e.g. "Audit logs must be retained for 90 days [1]."
+- Always reuse the SAME number for the same context block. Never invent a citation number that isn't shown below.
+- If multiple blocks support a statement, cite all of them, e.g. [1][3]."""
 
 
 CHAT_SYSTEM_PROMPT = """You are Dar, a friendly assistant for a CIS Controls v8 knowledge base.
@@ -50,10 +53,17 @@ def get_llm() -> ChatOllama:
     return ChatOllama(model=LLM_MODEL, temperature=TEMPERATURE)
 
 
-def build_prompt(query: str, chunks: list[dict]) -> list:
+def build_prompt(query: str, chunks: list[dict], citation_numbers: list[int]) -> list:
     # chunk content already starts with [section_title] from chunker.py
-    # so we just join them — no need to add another header wrapper
-    context = "\n\n---\n\n".join(c['content'] for c in chunks)
+    # so we just join them — no need to add another header wrapper.
+    # Group chunks by citation number so the LLM sees one block per [N] tag,
+    # even if multiple retrieved chunks map to the same deduplicated source.
+    grouped: dict[int, list[str]] = {}
+    for chunk, num in zip(chunks, citation_numbers):
+        grouped.setdefault(num, []).append(chunk['content'])
+
+    blocks = [f"[{num}] " + "\n\n".join(parts) for num, parts in grouped.items()]
+    context = "\n\n---\n\n".join(blocks)
 
     return [
         SystemMessage(content=SYSTEM_PROMPT),
@@ -61,18 +71,18 @@ def build_prompt(query: str, chunks: list[dict]) -> list:
     ]
 
 
-def generate(query: str, chunks: list[dict]) -> str:
+def generate(query: str, chunks: list[dict], citation_numbers: list[int]) -> str:
     """Generate an answer from retrieved chunks using llama3.2."""
     llm = get_llm()
-    messages = build_prompt(query, chunks)
+    messages = build_prompt(query, chunks, citation_numbers)
     response = llm.invoke(messages)
     return response.content
 
 
-def generate_stream(query: str, chunks: list[dict]):
+def generate_stream(query: str, chunks: list[dict], citation_numbers: list[int]):
     """Yield tokens from llama3.2 one at a time for SSE streaming."""
     llm = get_llm()
-    messages = build_prompt(query, chunks)
+    messages = build_prompt(query, chunks, citation_numbers)
     for token in llm.stream(messages):
         if token.content:
             yield token.content
@@ -127,5 +137,5 @@ if __name__ == "__main__":
 
     query = "How long should audit logs be retained?"
     print(f"Query: {query}\n")
-    answer = generate(query, test_chunks)
+    answer = generate(query, test_chunks, citation_numbers=[1])
     print(f"Answer:\n{answer}")
