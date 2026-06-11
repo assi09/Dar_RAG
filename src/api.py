@@ -37,6 +37,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from reranker import retrieve_and_rerank
 from generator import generate, generate_stream, classify_query, generate_chat_stream, generate_off_topic_stream
+from citations import dedupe_sources
 from langsmith import Client as LangSmithClient
 import db
 
@@ -66,10 +67,16 @@ class QueryRequest(BaseModel):
     conversation_id: str | None = None
 
 
+class SourceItem(BaseModel):
+    section: str
+    page: str
+    snippet: str = ""           # excerpt of the retrieved chunk, for citation previews
+
+
 class QueryResponse(BaseModel):
     answer: str
     run_id: str                # use this to submit feedback
-    sources: list[dict]        # retrieved sections for transparency
+    sources: list[SourceItem]  # retrieved sections for transparency
 
 
 class FeedbackRequest(BaseModel):
@@ -94,7 +101,7 @@ class MessageOut(BaseModel):
     id: str
     role: str
     content: str
-    sources: list[dict]
+    sources: list[SourceItem]
     run_id: str | None
     created_at: str
 
@@ -142,7 +149,8 @@ def query(request: QueryRequest):
         raise HTTPException(status_code=400, detail="question must not be empty")
 
     chunks = retrieve_and_rerank(request.question)
-    answer = generate(request.question, chunks)
+    sources, citation_numbers = dedupe_sources(chunks)
+    answer = generate(request.question, chunks, citation_numbers)
 
     run_id = str(uuid.uuid4())
 
@@ -150,7 +158,7 @@ def query(request: QueryRequest):
     _runs[run_id] = {
         "question": request.question,
         "answer": answer,
-        "sources": [{"section": c["section"], "page": c["page"]} for c in chunks],
+        "sources": sources,
     }
 
     # Log to LangSmith if tracing is enabled
@@ -167,14 +175,6 @@ def query(request: QueryRequest):
             )
         except Exception:
             pass  # feedback logging is non-blocking
-
-    seen: set[tuple] = set()
-    sources = []
-    for c in chunks:
-        key = (c["section"], int(float(c["page"])))
-        if key not in seen:
-            seen.add(key)
-            sources.append({"section": c["section"], "page": str(key[1])})
 
     return QueryResponse(answer=answer, run_id=run_id, sources=sources)
 
@@ -307,17 +307,10 @@ def query_stream(request: QueryRequest):
 
     sources = []
     chunks = []
+    citation_numbers = []
     if classification == "rag":
         chunks = retrieve_and_rerank(request.question)
-
-        # Deduplicate by section+page (multiple chunks from the same section are
-        # useful for generation but redundant in the sources display)
-        seen_sources: set[tuple] = set()
-        for c in chunks:
-            key = (c["section"], int(float(c["page"])))
-            if key not in seen_sources:
-                seen_sources.add(key)
-                sources.append({"section": c["section"], "page": str(key[1])})
+        sources, citation_numbers = dedupe_sources(chunks)
 
     _runs[run_id] = {"question": request.question, "answer": "", "sources": sources}
 
@@ -325,7 +318,7 @@ def query_stream(request: QueryRequest):
         yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'conversation_id': conversation_id, 'sources': sources})}\n\n"
         full = []
         if classification == "rag":
-            token_gen = generate_stream(request.question, chunks)
+            token_gen = generate_stream(request.question, chunks, citation_numbers)
         elif classification == "greeting":
             token_gen = generate_chat_stream(request.question)
         else:
