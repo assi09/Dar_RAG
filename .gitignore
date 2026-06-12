@@ -11,3 +11,4 @@ data/feedback_log.json
 data/dar.db
 
 *.Identifier
+.deepeval/

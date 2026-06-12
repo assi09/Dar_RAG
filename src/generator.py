@@ -79,11 +79,16 @@ def generate(query: str, chunks: list[dict], citation_numbers: list[int]) -> str
     return response.content
 
 
-def generate_stream(query: str, chunks: list[dict], citation_numbers: list[int]):
-    """Yield tokens from llama3.2 one at a time for SSE streaming."""
+def generate_stream(query: str, chunks: list[dict], citation_numbers: list[int], run_id=None):
+    """Yield tokens from llama3.2 one at a time for SSE streaming.
+
+    Passing run_id sets the LangSmith trace ID for this LLM call, so that
+    feedback submitted with the same ID attaches to this trace.
+    """
     llm = get_llm()
     messages = build_prompt(query, chunks, citation_numbers)
-    for token in llm.stream(messages):
+    config = {"run_id": run_id} if run_id else {}
+    for token in llm.stream(messages, config=config):
         if token.content:
             yield token.content
 
@@ -100,11 +105,12 @@ def classify_query(query: str) -> str:
     return "rag"
 
 
-def generate_chat_stream(query: str):
+def generate_chat_stream(query: str, run_id=None):
     """Yield tokens for a casual conversational reply (no document context)."""
     llm = get_llm()
     messages = [SystemMessage(content=CHAT_SYSTEM_PROMPT), HumanMessage(content=query)]
-    for token in llm.stream(messages):
+    config = {"run_id": run_id} if run_id else {}
+    for token in llm.stream(messages, config=config):
         if token.content:
             yield token.content
 

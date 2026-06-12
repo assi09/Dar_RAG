@@ -21,7 +21,7 @@ from datetime import datetime
 from pathlib import Path
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import BackgroundTasks, FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
@@ -39,6 +39,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from reranker import retrieve_and_rerank
 from generator import generate, generate_stream, classify_query, generate_chat_stream, generate_off_topic_stream
 from citations import dedupe_sources
+from live_eval import evaluate_answer
 from langsmith import Client as LangSmithClient
 import db
 
@@ -159,6 +160,13 @@ def _make_title(question: str) -> str:
 _runs: dict[str, dict] = {}
 
 
+def _run_live_eval(run_id: str, question: str, answer: str, retrieval_context: list[str]):
+    """Score a 'rag' answer with no-ground-truth DeepEval metrics and persist the results."""
+    results = evaluate_answer(question, answer, retrieval_context)
+    if results:
+        db.add_eval_metrics(run_id, question, results, datetime.utcnow().isoformat())
+
+
 # ── Endpoints ────────────────────────────────────────────────────────────────
 
 @app.post("/api/query", response_model=QueryResponse)
@@ -210,12 +218,16 @@ def feedback(request: FeedbackRequest):
             detail=f"reason is required for negative feedback and must be one of {sorted(REASON_CHOICES)}",
         )
 
-    if request.run_id not in _runs:
-        raise HTTPException(status_code=404, detail=f"run_id '{request.run_id}' not found")
+    if request.run_id in _runs:
+        run = _runs[request.run_id]
+    else:
+        # _runs is cleared on every backend restart; fall back to the persisted
+        # message for run_ids from messages generated in a prior process.
+        run = db.get_run_context(request.run_id)
+        if run is None:
+            raise HTTPException(status_code=404, detail=f"run_id '{request.run_id}' not found")
 
     feedback_id = str(uuid.uuid4())
-
-    run = _runs[request.run_id]
     now = datetime.utcnow().isoformat()
 
     db.add_feedback(
@@ -248,6 +260,13 @@ def get_feedback():
     """Retrieve all saved feedback entries from the database."""
     entries = db.list_feedback()
     return {"feedback": entries, "total": len(entries)}
+
+
+@app.get("/api/eval-metrics")
+def get_eval_metrics():
+    """Retrieve live, no-ground-truth DeepEval scores for 'rag' queries, oldest first."""
+    entries = db.list_eval_metrics()
+    return {"metrics": entries, "total": len(entries)}
 
 
 @app.post("/api/conversations", response_model=ConversationSummary)
@@ -300,7 +319,7 @@ def delete_conversation(conversation_id: str):
 
 
 @app.post("/api/query/stream")
-def query_stream(request: QueryRequest):
+def query_stream(request: QueryRequest, background_tasks: BackgroundTasks):
     """Stream the RAG answer as Server-Sent Events (text/event-stream).
 
     Event sequence:
@@ -311,7 +330,8 @@ def query_stream(request: QueryRequest):
     if not request.question.strip():
         raise HTTPException(status_code=400, detail="question must not be empty")
 
-    run_id = str(uuid.uuid4())
+    run_uuid = uuid.uuid4()
+    run_id = str(run_uuid)
     now = datetime.utcnow().isoformat()
 
     # Resume an existing conversation, or start a new one
@@ -341,9 +361,9 @@ def query_stream(request: QueryRequest):
         yield f"data: {json.dumps({'type': 'meta', 'run_id': run_id, 'conversation_id': conversation_id, 'message_id': assistant_message_id, 'sources': sources})}\n\n"
         full = []
         if classification == "rag":
-            token_gen = generate_stream(request.question, chunks, citation_numbers)
+            token_gen = generate_stream(request.question, chunks, citation_numbers, run_id=run_uuid)
         elif classification == "greeting":
-            token_gen = generate_chat_stream(request.question)
+            token_gen = generate_chat_stream(request.question, run_id=run_uuid)
         else:
             token_gen = generate_off_topic_stream()
         for token in token_gen:
@@ -352,12 +372,17 @@ def query_stream(request: QueryRequest):
         answer = "".join(full)
         _runs[run_id]["answer"] = answer
         db.add_message(assistant_message_id, conversation_id, "assistant", answer, sources, run_id, datetime.utcnow().isoformat())
+        if classification == "rag":
+            background_tasks.add_task(
+                _run_live_eval, run_id, request.question, answer, [c["content"] for c in chunks]
+            )
         yield f"data: {json.dumps({'type': 'done'})}\n\n"
 
     return StreamingResponse(
         event_generator(),
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        background=background_tasks,
     )
 
 

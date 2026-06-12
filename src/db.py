@@ -47,6 +47,16 @@ CREATE TABLE IF NOT EXISTS message_versions (
     FOREIGN KEY (message_id) REFERENCES messages(id)
 );
 
+CREATE TABLE IF NOT EXISTS eval_metrics (
+    id TEXT PRIMARY KEY,
+    run_id TEXT NOT NULL,
+    question TEXT NOT NULL,
+    metric TEXT NOT NULL,
+    score REAL NOT NULL,
+    success INTEGER NOT NULL,
+    created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS feedback (
     id TEXT PRIMARY KEY,
     run_id TEXT NOT NULL,
@@ -249,6 +259,43 @@ def update_message(
     conn.close()
 
 
+def get_run_context(run_id: str) -> dict | None:
+    """Look up question/answer/sources for a run_id from persisted messages.
+
+    Used as a fallback when the in-memory _runs cache has been cleared by a
+    backend restart but the run_id still belongs to a message stored earlier.
+    """
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id, conversation_id, content, sources FROM messages WHERE run_id = ?",
+        (run_id,),
+    ).fetchone()
+    if row is None:
+        row = conn.execute(
+            "SELECT mv.message_id AS id, m.conversation_id, mv.content, mv.sources "
+            "FROM message_versions mv JOIN messages m ON m.id = mv.message_id "
+            "WHERE mv.run_id = ?",
+            (run_id,),
+        ).fetchone()
+    if row is None:
+        conn.close()
+        return None
+
+    prev_user = conn.execute(
+        "SELECT content FROM messages WHERE conversation_id = ? AND role = 'user' "
+        "AND created_at < (SELECT created_at FROM messages WHERE id = ?) "
+        "ORDER BY created_at DESC LIMIT 1",
+        (row["conversation_id"], row["id"]),
+    ).fetchone()
+    conn.close()
+
+    return {
+        "question": prev_user["content"] if prev_user else "",
+        "answer": row["content"],
+        "sources": json.loads(row["sources"]) if row["sources"] else [],
+    }
+
+
 def add_feedback(
     feedback_id: str,
     run_id: str,
@@ -281,6 +328,31 @@ def list_feedback() -> list[dict]:
         {**dict(r), "sources": json.loads(r["sources"]) if r["sources"] else []}
         for r in rows
     ]
+
+
+def add_eval_metrics(run_id: str, question: str, results: list[dict], created_at: str):
+    """Persist live DeepEval metric scores for a 'rag' classified query."""
+    import uuid as _uuid
+
+    conn = get_db()
+    for r in results:
+        conn.execute(
+            "INSERT INTO eval_metrics (id, run_id, question, metric, score, success, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (str(_uuid.uuid4()), run_id, question, r["metric"], r["score"], int(r["success"]), created_at),
+        )
+    conn.commit()
+    conn.close()
+
+
+def list_eval_metrics() -> list[dict]:
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT id, run_id, question, metric, score, success, created_at "
+        "FROM eval_metrics ORDER BY created_at ASC"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
 
 
 def rename_conversation(conversation_id: str, title: str, updated_at: str):
